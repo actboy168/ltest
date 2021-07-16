@@ -88,6 +88,10 @@ local function failure(...)
     error(string.format(...), 3)
 end
 
+function m.equals(actual, expected)
+    return equals(actual, expected)
+end
+
 function m.failure(...)
     failure(...)
 end
