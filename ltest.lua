@@ -133,7 +133,9 @@ end
 
 local function parseCmdLine(cmdLine)
     local result = {}
-    for _, cmdArg in ipairs(cmdLine) do
+    local i = 1
+    while i <= #cmdLine do
+        local cmdArg = cmdLine[i]
         if cmdArg:sub(1,1) == '-' then
             if cmdArg == '--verbose' or cmdArg == '-v' then
                 result.verbosity = true
@@ -141,12 +143,18 @@ local function parseCmdLine(cmdLine)
                 result.shuffle = true
             elseif cmdArg == '--coverage' or cmdArg == '-c' then
                 result.coverage = true
+            elseif cmdArg == '--list' or cmdArg == '-l' then
+                result.list = true
+            elseif cmdArg == '--test' or cmdArg == '-t' then
+                i = i + 1
+                result.test = cmdLine[i]
             else
                 error('Unknown option: '..cmdArg)
             end
         else
             result[#result+1] = cmdArg
         end
+        i = i + 1
     end
     return result
 end
@@ -194,7 +202,41 @@ local function matchPattern(expr, patterns)
     end
 end
 
+local function randomizeTable(t)
+    for i = #t, 2, -1 do
+        local j = math.random(i)
+        if i ~= j then
+            t[i], t[j] = t[j], t[i]
+        end
+    end
+end
+
 local function selectList(lst)
+    local testname = options.test
+    if testname then
+        local hasMethod = testname:find(".", 1, true)
+        if hasMethod then
+            for _, v in ipairs(lst) do
+                local expr = v[1]
+                if expr == testname then
+                    return {v}
+                end
+            end
+        else
+            testname = testname.."."
+            local sz = #testname
+            for _, v in ipairs(lst) do
+                local expr = v[1]
+                if expr:sub(1,sz) == testname then
+                    return {v}
+                end
+            end
+        end
+        return {}
+    end
+    if options.shuffle then
+        randomizeTable(lst)
+    end
     local patterns = options
     if #patterns == 0 then
         return lst
@@ -226,13 +268,12 @@ local function selectList(lst)
     return res
 end
 
-local function randomizeTable(t)
-    for i = #t, 2, -1 do
-        local j = math.random(i)
-        if i ~= j then
-            t[i], t[j] = t[j], t[i]
-        end
+local function showList(selected)
+    for _, v in ipairs(selected) do
+        local name = v[1]
+        print(name)
     end
+    return true
 end
 
 local instanceSet = {}
@@ -260,10 +301,10 @@ function m.run()
             lst[#lst+1] = { name..'.'..methodName, instance, instance[methodName] }
         end
     end
-    if options.shuffle then
-        randomizeTable(lst)
-    end
     local selected = selectList(lst)
+    if options.list then
+        return showList(selected)
+    end
     if options.verbosity then
         print('Started on '.. os.date())
     end
