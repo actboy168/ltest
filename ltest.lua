@@ -1,7 +1,15 @@
+local LuaVersion = (function ()
+    local major, minor = _VERSION:match "Lua (%d)%.(%d)"
+    return tonumber(major)*10+tonumber(minor)
+end)()
+
 local m = {}
 
 local stringify = require "stringify"
-local coverage = require "coverage"
+local coverage
+if LuaVersion >= 53 then
+    coverage = require "coverage"
+end
 
 local function split(str)
     local r = {}
@@ -142,7 +150,9 @@ local function parseCmdLine(cmdLine)
             elseif cmdArg == '--shuffle' or cmdArg == '-s' then
                 result.shuffle = true
             elseif cmdArg == '--coverage' or cmdArg == '-c' then
-                result.coverage = true
+                if coverage then
+                    result.coverage = true
+                end
             elseif cmdArg == '--list' or cmdArg == '-l' then
                 result.list = true
             elseif cmdArg == '--test' or cmdArg == '-t' then
@@ -346,10 +356,16 @@ function m.run()
     if #failures == 0 then
         print('OK')
     end
-    return #failures == 0
+    if #failures == 0 then
+        return 0
+    end
+    return 1
 end
 
 function m.moduleCoverage(name)
+    if not options.coverage then
+        return
+    end
     local path = assert(package.searchpath(name, package.path))
     local f = assert(loadfile(path))
     local source = debug.getinfo(f, "S").source
