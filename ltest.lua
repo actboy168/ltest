@@ -303,12 +303,16 @@ function m.test(name)
     return instance
 end
 
+function m.format(className, methodName)
+    return className..'.'..methodName
+end
+
 function m.run()
     local lst = {}
     for _, name in ipairs(instanceSet) do
         local instance = instanceSet[name]
         for _, methodName in ipairs(instance) do
-            lst[#lst+1] = { name..'.'..methodName, instance, instance[methodName] }
+            lst[#lst+1] = { m.format(name, methodName), instance, instance[methodName] }
         end
     end
     local selected = selectList(lst)
