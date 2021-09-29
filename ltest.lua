@@ -380,5 +380,6 @@ end
 if options.coverage then
     coverage.start()
 end
+m.options = options
 
 return m
