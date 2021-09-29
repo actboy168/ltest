@@ -136,6 +136,7 @@ for _, name in ipairs {'Nil', 'Number', 'String', 'Table', 'Boolean', 'Function'
         if type(value) ~= typeExpected then
             failure('expected: a %s value, actual: type %s, value %s.%s', typeExpected, type(value), stringify(value), errmsg or '')
         end
+        return value
     end
 end
 
