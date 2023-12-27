@@ -1,6 +1,6 @@
 local LuaVersion = (function ()
     local major, minor = _VERSION:match "Lua (%d)%.(%d)"
-    return tonumber(major)*10+tonumber(minor)
+    return tonumber(major) * 10 + tonumber(minor)
 end)()
 
 local m = {}
@@ -13,14 +13,14 @@ end
 
 local function split(str)
     local r = {}
-    str:gsub('[^\n]+', function (w) r[#r+1] = w end)
+    str:gsub("[^\n]+", function (w) r[#r+1] = w end)
     return r
 end
 
 local sourcename = debug.getinfo(1, "S").source:match "[/\\]([^/\\]*)%.lua$"
-local sourcepatt = '[/\\]'..sourcename..'%.lua:%d+: '
+local sourcepatt = "[/\\]"..sourcename.."%.lua:%d+: "
 local function pretty_trace(funcName, stackTrace)
-    local function isInternalLine( s )
+    local function isInternalLine(s)
         return s:find(sourcepatt) ~= nil
     end
     local lst = split(stackTrace)
@@ -38,8 +38,8 @@ local function pretty_trace(funcName, stackTrace)
             break
         end
     end
-    lst[first-1] = lst[1]
-    local trace = table.concat(lst, '\n', first-1, last)
+    lst[first - 1] = lst[1]
+    local trace = table.concat(lst, "\n", first - 1, last)
     trace = trace:gsub("in (%a+) 'methodInstance'", "in %1 '"..funcName.."'")
     return trace
 end
@@ -56,15 +56,19 @@ end
 local equals_value
 
 local function equals_table(actual, expected, recursions)
+    local actual_n = 0
     for k, v in pairs(actual) do
         if not equals_value(v, expected[k], recursions) then
             return false
         end
+        actual_n = actual_n + 1
     end
-    for k, v in pairs(expected) do
-        if not equals_value(actual[k], v, recursions) then
-            return false
-        end
+    local expected_n = 0
+    for _ in pairs(expected) do
+        expected_n = expected_n + 1
+    end
+    if actual_n ~= expected_n then
+        return false
     end
     return equals_value(getmetatable(actual), getmetatable(expected), recursions)
 end
@@ -73,12 +77,12 @@ function equals_value(actual, expected, recursions)
     if type(actual) ~= type(expected) then
         return false
     end
-    if type(actual) ~= 'table' then
+    if type(actual) ~= "table" then
         return actual == expected
     end
     local subtable = recursion_get(recursions, actual)
     local previous = subtable[expected]
-    if previous ~= nil  then
+    if previous ~= nil then
         return previous
     end
     subtable[expected] = true
@@ -112,7 +116,7 @@ end
 
 function m.assertNotEquals(actual, expected)
     if equals(actual, expected) then
-        failure('Received the not expected value: %s', stringify(actual))
+        failure("Received the not expected value: %s", stringify(actual))
     end
 end
 
@@ -125,29 +129,18 @@ end
 function m.assertErrorMsgEquals(expectedMsg, func, ...)
     local success, actualMsg = pcall(func, ...)
     if success then
-        failure('No error generated when calling function but expected error: %s', stringify(expectedMsg))
+        failure("No error generated when calling function but expected error: %s", stringify(expectedMsg))
     end
     m.assertEquals(actualMsg, expectedMsg)
 end
 
-for _, name in ipairs {'Nil', 'Number', 'String', 'Table', 'Boolean', 'Function', 'Userdata', 'Thread'} do
+for _, name in ipairs { "Nil", "Number", "String", "Table", "Boolean", "Function", "Userdata", "Thread" } do
     local typeExpected = name:lower()
-    m["assertIs"..name] = function(value, errmsg)
+    m["assertIs"..name] = function (value, errmsg)
         if type(value) ~= typeExpected then
-            failure('expected: a %s value, actual: type %s, value %s.%s', typeExpected, type(value), stringify(value), errmsg or '')
+            failure("expected: a %s value, actual: type %s, value %s. (%s)", typeExpected, type(value), stringify(value), errmsg or "")
         end
         return value
-    end
-end
-
-local function touch(file)
-    local isWindows = package.config:sub(1,1) == "\\"
-    local isMingw = os.getenv 'MSYSTEM' ~= nil
-    local isWindowsShell = (isWindows) and (not isMingw)
-    if isWindowsShell then
-        os.execute('type nul > '..file)
-    else
-        os.execute('touch '..file)
     end
 end
 
@@ -156,25 +149,25 @@ local function parseCmdLine(cmdLine)
     local i = 1
     while i <= #cmdLine do
         local cmdArg = cmdLine[i]
-        if cmdArg:sub(1,1) == '-' then
-            if cmdArg == '--verbose' or cmdArg == '-v' then
+        if cmdArg:sub(1, 1) == "-" then
+            if cmdArg == "--verbose" or cmdArg == "-v" then
                 result.verbosity = true
-            elseif cmdArg == '--shuffle' or cmdArg == '-s' then
+            elseif cmdArg == "--shuffle" or cmdArg == "-s" then
                 result.shuffle = true
-            elseif cmdArg == '--coverage' or cmdArg == '-c' then
+            elseif cmdArg == "--coverage" or cmdArg == "-c" then
                 if coverage then
                     result.coverage = true
                 end
-            elseif cmdArg == '--list' or cmdArg == '-l' then
+            elseif cmdArg == "--list" or cmdArg == "-l" then
                 result.list = true
-            elseif cmdArg == '--test' or cmdArg == '-t' then
+            elseif cmdArg == "--test" or cmdArg == "-t" then
                 i = i + 1
                 result.test = cmdLine[i]
-            elseif cmdArg == '--touch' then
+            elseif cmdArg == "--touch" then
                 i = i + 1
                 result.touch = cmdLine[i]
             else
-                error('Unknown option: '..cmdArg)
+                error("Unknown option: "..cmdArg)
             end
         else
             result[#result+1] = cmdArg
@@ -185,38 +178,60 @@ local function parseCmdLine(cmdLine)
 end
 local options = parseCmdLine(rawget(_G, "arg") or {})
 
+local output = io.stdout
+
+local function printTestName(name)
+    if options.verbosity then
+        output:write("    ", name, " ... ")
+        output:flush()
+    end
+end
+
+local function printTestSuccess()
+    if options.verbosity then
+        output:write("Ok\n")
+    else
+        output:write(".")
+    end
+    output:flush()
+end
+
+local function printTestFailed(errmsg)
+    if options.verbosity then
+        output:write("FAIL\n", errmsg, "\n")
+    else
+        output:write("F")
+    end
+    output:flush()
+end
+
+local function print(msg)
+    if msg then
+        output:write(msg, "\n")
+    else
+        output:write("\n")
+    end
+end
+
 local function errorHandler(e)
     return { msg = e, trace = string.sub(debug.traceback("", 3), 2) }
 end
 
 local function execFunction(failures, name, classInstance, methodInstance)
-    if options.verbosity then
-        io.stdout:write("    ", name, " ... ")
-        io.stdout:flush()
-    end
+    printTestName(name)
     local ok, err = xpcall(function () methodInstance(classInstance) end, errorHandler)
     if ok then
-        if options.verbosity then
-            io.stdout:write("Ok\n")
-        else
-            io.stdout:write(".")
-        end
+        printTestSuccess()
     else
+        ---@cast err -nil
         err.name = name
         err.trace = pretty_trace(name, err.trace)
-        if type(err.msg) ~= 'string' then
+        if type(err.msg) ~= "string" then
             err.msg = stringify(err.msg)
         end
         failures[#failures+1] = err
-        if options.verbosity then
-            io.stdout:write("FAIL\n")
-            io.stdout:write(err.msg)
-            io.stdout:write("\n")
-        else
-            io.stdout:write("F")
-        end
+        printTestFailed(err.msg)
     end
-    io.stdout:flush()
 end
 
 local function matchPattern(expr, patterns)
@@ -244,7 +259,7 @@ local function selectList(lst)
             for _, v in ipairs(lst) do
                 local expr = v[1]
                 if expr == testname then
-                    return {v}
+                    return { v }
                 end
             end
         else
@@ -252,8 +267,8 @@ local function selectList(lst)
             local sz = #testname
             for _, v in ipairs(lst) do
                 local expr = v[1]
-                if expr:sub(1,sz) == testname then
-                    return {v}
+                if expr:sub(1, sz) == testname then
+                    return { v }
                 end
             end
         end
@@ -268,7 +283,7 @@ local function selectList(lst)
     end
     local includedPattern, excludedPattern = {}, {}
     for _, pattern in ipairs(patterns) do
-        if pattern:sub(1,1) == '~' then
+        if pattern:sub(1, 1) == "~" then
             excludedPattern[#excludedPattern+1] = pattern:sub(2)
         else
             includedPattern[#includedPattern+1] = pattern
@@ -307,19 +322,38 @@ function m.test(name)
     if instanceSet[name] then
         return instanceSet[name]
     end
-    local instance = setmetatable({}, {__newindex=function(self, k, v)
-        if type(v) == "function" then
-            rawset(self, #self+1, k)
+    local instance = setmetatable({}, {
+        __newindex = function (self, k, v)
+            if type(v) == "function" then
+                rawset(self, #self + 1, k)
+            end
+            rawset(self, k, v)
         end
-        rawset(self, k, v)
-    end})
+    })
     instanceSet[name] = instance
     instanceSet[#instanceSet+1] = name
     return instance
 end
 
 function m.format(className, methodName)
-    return className..'.'..methodName
+    return className.."."..methodName
+end
+
+local function touch(file)
+    local isWindowsShell; do
+        if options.shell then
+            isWindowsShell = options.shell ~= "sh"
+        else
+            local isWindows = package.config:sub(1, 1) == "\\"
+            local isMingw = os.getenv "MSYSTEM" ~= nil
+            isWindowsShell = (isWindows) and (not isMingw)
+        end
+    end
+    if isWindowsShell then
+        os.execute("type nul > "..file)
+    else
+        os.execute("touch "..file)
+    end
 end
 
 function m.run()
@@ -335,7 +369,7 @@ function m.run()
         return showList(selected)
     end
     if options.verbosity then
-        print('Started on '.. os.date())
+        print("Started on "..os.date())
     end
     local failures = {}
     collectgarbage "collect"
@@ -366,14 +400,14 @@ function m.run()
     if options.coverage then
         print(coverage.result())
     end
-    local s = string.format('Ran %d tests in %0.3f seconds, %d successes, %d failures', #selected, duration, #selected - #failures, #failures)
+    local s = string.format("Ran %d tests in %0.3f seconds, %d successes, %d failures", #selected, duration, #selected - #failures, #failures)
     local nonSelectedCount = #lst - #selected
     if nonSelectedCount > 0 then
-        s = s .. string.format(", %d non-selected", nonSelectedCount)
+        s = s..string.format(", %d non-selected", nonSelectedCount)
     end
     print(s)
     if #failures == 0 then
-        print('OK')
+        print("OK")
         if options.touch then
             touch(options.touch)
         end
