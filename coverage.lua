@@ -2,19 +2,30 @@ local debug_getinfo = debug.getinfo
 local undump = require "undump"
 local include = {}
 
+local function nextline(proto, abs, currentline, pc)
+    local line = proto.lineinfo[pc]
+    if line == -128 then
+        return assert(abs[pc-1])
+    else
+        return currentline + line
+    end
+end
+
 local function calc_actives_54(proto, actives)
-    local n = proto.linedefined
+    local currentline = proto.linedefined
     local abs = {}
     for _, line in ipairs(proto.abslineinfo) do
         abs[line.pc] = line.line
     end
-    for i, line in ipairs(proto.lineinfo) do
-        if line == -128 then
-            n = assert(abs[i - 1])
-        else
-            n = n + line
-        end
-        actives[n] = true
+    local start = 1
+    if proto.is_vararg > 0 then
+        assert(proto.code[1] & 0x7F == 81) -- OP_VARARGPREP
+        currentline = nextline(proto, abs, currentline, 1)
+        start = 2
+    end
+    for pc = start, #proto.lineinfo do
+        currentline = nextline(proto, abs, currentline, pc)
+        actives[currentline] = true
     end
     for i = 1, proto.sizep do
         calc_actives_54(proto.p[i], actives)
@@ -42,7 +53,7 @@ local function get_actives(source)
     end
     local cl, version = undump(string.dump(assert(load(source))))
     local actives = {}
-    if version >= 504 then
+    if version >= 0x54 then
         calc_actives_54(cl.f, actives)
     else
         calc_actives_53(cl.f, actives)
