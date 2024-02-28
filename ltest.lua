@@ -473,7 +473,7 @@ LOADED["coverage"] = function ()
     local function nextline(proto, abs, currentline, pc)
         local line = proto.lineinfo[pc]
         if line == -128 then
-            return assert(abs[pc-1])
+            return assert(abs[pc - 1])
         else
             return currentline + line
         end
@@ -608,6 +608,7 @@ LOADED["coverage"] = function ()
         end
         return table.concat(str, "\n")
     end
+
     return m
 end
 
