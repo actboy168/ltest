@@ -1038,5 +1038,6 @@ if options.coverage then
     end
 end
 m.options = options
+m.stringify = stringify
 
 return m
