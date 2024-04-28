@@ -773,8 +773,47 @@ local function parseCmdLine(cmdLine)
     return result
 end
 local options = parseCmdLine(rawget(_G, "arg") or {})
-
+local marks = {}
 local output = io.stdout
+
+local _XPASS_ = "XPASS"
+local _IGNORE_ = "IGNORE"
+local _SKIP_ = "SKIP"
+
+local function setMark(name, v)
+    local className, methodName = name:match "^([^.]+)%.([^.]+)$"
+    if className and methodName then
+        local classMark = marks[className]
+        if classMark == nil then
+            marks[className] = { [methodName] = v }
+        else
+            classMark[methodName] = v
+        end
+        return
+    end
+    className = name:match "^[^.]+$"
+    if className then
+        local classMark = marks[className]
+        if classMark == nil then
+            marks[className] = { v }
+        else
+            classMark[1] = v
+        end
+        return
+    end
+    error("invalid test name: "..name)
+end
+
+local function getMark(className, methodName)
+    local classMark = marks[className]
+    if classMark == nil then
+        return _XPASS_
+    end
+    if classMark[methodName] then
+        return classMark[methodName]
+    end
+    return classMark[1] or _XPASS_
+end
 
 local function printTestName(name)
     if options.verbosity then
@@ -801,6 +840,15 @@ local function printTestFailed(errmsg)
     output:flush()
 end
 
+local function printTestSkipped()
+    if options.verbosity then
+        output:write("Skipped\n")
+    else
+        output:write(".")
+    end
+    output:flush()
+end
+
 local function print(msg)
     if msg then
         output:write(msg, "\n")
@@ -813,11 +861,19 @@ local function errorHandler(e)
     return { msg = e, trace = string.sub(debug.traceback("", 3), 2) }
 end
 
-local function execFunction(failures, name, classInstance, methodInstance)
+local function execFunction(failures, name, classInstance, methodInstance, mark)
+    if mark == _IGNORE_ then
+        return
+    end
     printTestName(name)
+    if mark == _SKIP_ then
+        printTestSkipped()
+        return
+    end
     local ok, err = xpcall(function () methodInstance(classInstance) end, errorHandler)
     if ok then
         printTestSuccess()
+        return true
     else
         ---@cast err -nil
         err.name = name
@@ -849,18 +905,19 @@ end
 
 local function selectList(instanceSet)
     local lst = {}
-    for _, name in ipairs(instanceSet) do
-        local instance = instanceSet[name]
+    for _, className in ipairs(instanceSet) do
+        local instance = instanceSet[className]
         for _, methodName in ipairs(instance) do
-            lst[#lst+1] = { m.format(name, methodName), instance, instance[methodName] }
+            local mark = getMark(className, methodName)
+            lst[#lst+1] = { m.format(className, methodName), instance, instance[methodName], mark }
         end
+    end
+    if options.shuffle then
+        randomizeTable(lst)
     end
     local patterns = options
     if #patterns == 0 then
-        if options.shuffle then
-            randomizeTable(lst)
-        end
-        return lst, #lst
+        return lst
     end
     local includedPattern, excludedPattern = {}, {}
     for _, pattern in ipairs(patterns) do
@@ -870,26 +927,22 @@ local function selectList(instanceSet)
             includedPattern[#includedPattern+1] = pattern
         end
     end
-    local res = {}
     if #includedPattern ~= 0 then
         for _, v in ipairs(lst) do
             local expr = v[1]
-            if matchPattern(expr, includedPattern) and not matchPattern(expr, excludedPattern) then
-                res[#res+1] = v
+            if not matchPattern(expr, includedPattern) or matchPattern(expr, excludedPattern) then
+                v[4] = _IGNORE_
             end
         end
     else
         for _, v in ipairs(lst) do
             local expr = v[1]
-            if not matchPattern(expr, excludedPattern) then
-                res[#res+1] = v
+            if matchPattern(expr, excludedPattern) then
+                v[4] = _IGNORE_
             end
         end
     end
-    if options.shuffle then
-        randomizeTable(res)
-    end
-    return res, #lst
+    return lst
 end
 
 local function showList(selected)
@@ -941,19 +994,22 @@ local function touch(file)
 end
 
 function m.run()
-    local selected, total_n = selectList(instanceSet)
+    local selected = selectList(instanceSet)
     if options.list then
         return showList(selected)
     end
     if options.verbosity then
         print("Started on "..os.date())
     end
+    local successes = 0
     local failures = {}
     collectgarbage "collect"
     local startTime = os.clock()
     for _, v in ipairs(selected) do
-        local name, instance, methodInstance = v[1], v[2], v[3]
-        execFunction(failures, name, instance, methodInstance)
+        local name, instance, methodInstance, mark = v[1], v[2], v[3], v[4]
+        if execFunction(failures, name, instance, methodInstance, mark) then
+            successes = successes + 1
+        end
     end
     local duration = os.clock() - startTime
     if coverage then
@@ -977,10 +1033,9 @@ function m.run()
     if coverage then
         print(coverage.result())
     end
-    local s = string.format("Ran %d tests in %0.3f seconds, %d successes, %d failures", #selected, duration, #selected - #failures, #failures)
-    local nonSelectedCount = total_n - #selected
-    if nonSelectedCount > 0 then
-        s = s..string.format(", %d non-selected", nonSelectedCount)
+    local s = string.format("Ran %d tests in %0.3f seconds, %d successes, %d failures", #selected, duration, successes, #failures)
+    if #selected - successes - #failures > 0 then
+        s = s..string.format(", %d skipped", (#selected - successes - #failures))
     end
     print(s)
     if #failures == 0 then
@@ -993,6 +1048,10 @@ function m.run()
         return 0
     end
     return 1
+end
+
+function m.skip(name)
+    setMark(name, _SKIP_)
 end
 
 function m.moduleCoverage(name)
