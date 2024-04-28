@@ -847,12 +847,19 @@ local function randomizeTable(t)
     end
 end
 
-local function selectList(lst)
-    if options.shuffle then
-        randomizeTable(lst)
+local function selectList(instanceSet)
+    local lst = {}
+    for _, name in ipairs(instanceSet) do
+        local instance = instanceSet[name]
+        for _, methodName in ipairs(instance) do
+            lst[#lst+1] = { m.format(name, methodName), instance, instance[methodName] }
+        end
     end
     local patterns = options
     if #patterns == 0 then
+        if options.shuffle then
+            randomizeTable(lst)
+        end
         return lst
     end
     local includedPattern, excludedPattern = {}, {}
@@ -878,6 +885,9 @@ local function selectList(lst)
                 res[#res+1] = v
             end
         end
+    end
+    if options.shuffle then
+        randomizeTable(res)
     end
     return res
 end
@@ -931,14 +941,7 @@ local function touch(file)
 end
 
 function m.run()
-    local lst = {}
-    for _, name in ipairs(instanceSet) do
-        local instance = instanceSet[name]
-        for _, methodName in ipairs(instance) do
-            lst[#lst+1] = { m.format(name, methodName), instance, instance[methodName] }
-        end
-    end
-    local selected = selectList(lst)
+    local selected = selectList(instanceSet)
     if options.list then
         return showList(selected)
     end
