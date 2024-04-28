@@ -759,9 +759,6 @@ local function parseCmdLine(cmdLine)
                 result.coverage = true
             elseif cmdArg == "--list" or cmdArg == "-l" then
                 result.list = true
-            elseif cmdArg == "--test" or cmdArg == "-t" then
-                i = i + 1
-                result.test = cmdLine[i]
             elseif cmdArg == "--touch" then
                 i = i + 1
                 result.touch = cmdLine[i]
@@ -851,28 +848,6 @@ local function randomizeTable(t)
 end
 
 local function selectList(lst)
-    local testname = options.test
-    if testname then
-        local hasMethod = testname:find(".", 1, true)
-        if hasMethod then
-            for _, v in ipairs(lst) do
-                local expr = v[1]
-                if expr == testname then
-                    return { v }
-                end
-            end
-        else
-            testname = testname.."."
-            local sz = #testname
-            for _, v in ipairs(lst) do
-                local expr = v[1]
-                if expr:sub(1, sz) == testname then
-                    return { v }
-                end
-            end
-        end
-        return {}
-    end
     if options.shuffle then
         randomizeTable(lst)
     end
