@@ -860,7 +860,7 @@ local function selectList(instanceSet)
         if options.shuffle then
             randomizeTable(lst)
         end
-        return lst
+        return lst, #lst
     end
     local includedPattern, excludedPattern = {}, {}
     for _, pattern in ipairs(patterns) do
@@ -889,7 +889,7 @@ local function selectList(instanceSet)
     if options.shuffle then
         randomizeTable(res)
     end
-    return res
+    return res, #lst
 end
 
 local function showList(selected)
@@ -941,7 +941,7 @@ local function touch(file)
 end
 
 function m.run()
-    local selected = selectList(instanceSet)
+    local selected, total_n = selectList(instanceSet)
     if options.list then
         return showList(selected)
     end
@@ -978,7 +978,7 @@ function m.run()
         print(coverage.result())
     end
     local s = string.format("Ran %d tests in %0.3f seconds, %d successes, %d failures", #selected, duration, #selected - #failures, #failures)
-    local nonSelectedCount = #lst - #selected
+    local nonSelectedCount = total_n - #selected
     if nonSelectedCount > 0 then
         s = s..string.format(", %d non-selected", nonSelectedCount)
     end
