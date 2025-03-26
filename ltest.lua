@@ -884,11 +884,15 @@ local function execFunction(failures, name, classInstance, methodInstance, mark)
         printTestSuccess()
         return true
     else
-        ---@cast err -nil
-        err.name = name
-        err.trace = pretty_trace(name, err.trace)
-        if type(err.msg) ~= "string" then
-            err.msg = stringify(err.msg)
+        if type(err) == "string" then
+            err = { msg = err, name = name, trace = "" }
+        else
+            ---@cast err -nil
+            err.name = name
+            err.trace = pretty_trace(name, err.trace)
+            if type(err.msg) ~= "string" then
+                err.msg = stringify(err.msg)
+            end
         end
         failures[#failures+1] = err
         printTestFailed(err.msg)
