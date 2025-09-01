@@ -748,11 +748,10 @@ return function(bytes)
 end
 ]]
 
-local coverage_start; do
-    local debug_getinfo = debug.getinfo
+local coverage = {}; do
     local include = {}
-    local m = {}
     local undump
+    local enable = false
 
     local function nextline(proto, abs, currentline, pc)
         local line = proto.lineinfo[pc]
@@ -831,13 +830,25 @@ local coverage_start; do
     end
 
     local function debug_hook(_, lineno)
-        local file = include[debug_getinfo(2, "S").source]
+        local file = include[debug.getinfo(2, "S").source]
         if file then
             file[lineno] = true
         end
     end
 
-    function m.include(source, name)
+    function coverage.start()
+        enable = true
+        undump = assert(load(undump_script))()
+        debug.sethook(debug_hook, "l")
+    end
+
+    function coverage.include(name)
+        if not enable then
+            return
+        end
+        local path = assert(package.searchpath(name, package.path))
+        local f = assert(loadfile(path))
+        local source = debug.getinfo(f, "S").source
         if include[source] then
             include[source].name = name
         else
@@ -845,19 +856,17 @@ local coverage_start; do
         end
     end
 
-    function m.start(co)
-        if co then
-            debug.sethook(co, debug_hook, "l")
-        else
-            debug.sethook(debug_hook, "l")
+    function coverage.stop()
+        if not enable then
+            return
         end
-    end
-
-    function m.stop()
         debug.sethook()
     end
 
-    function m.result()
+    function coverage.print_result()
+        if not enable then
+            return
+        end
         local str = {}
         for source, file in sortpairs(include) do
             local actives = get_actives(source)
@@ -882,22 +891,17 @@ local coverage_start; do
                     lines[#lines+1] = tostring(i)
                 end
             end
-            str[#str+1] = string.format("coverage: %02.02f%% (%d/%d) %s", pass / total * 100, pass, total, file.name)
+            str[#str+1] = string.format("coverage: %02.02f%% (%d/%d) module `%s`", pass / total * 100, pass, total, file.name)
             if #lines > 0 then
                 str[#str+1] = table.concat(lines, " ")
                 str[#str+1] = table.concat(status)
             end
         end
-        return table.concat(str, "\n")
-    end
-    function coverage_start()
-        undump = assert(load(undump_script))()
-        return m
+        print(table.concat(str, "\n"))
     end
 end
 
 local m = {}
-local coverage
 
 local function split(str)
     local r = {}
@@ -1312,9 +1316,7 @@ function m.run()
         end
     end
     local duration = os.clock() - startTime
-    if coverage then
-        coverage.stop()
-    end
+    coverage.stop()
     if options.verbosity then
         print("=========================================================")
     else
@@ -1330,9 +1332,7 @@ function m.run()
             print()
         end
     end
-    if coverage then
-        print(coverage.result())
-    end
+    coverage.print_result()
     local s = string.format("Ran %d tests in %0.3f seconds, %d successes, %d failures", #selected, duration, successes, #failures)
     if #selected - successes - #failures > 0 then
         s = s..string.format(", %d skipped", (#selected - successes - #failures))
@@ -1355,26 +1355,19 @@ function m.skip(name)
 end
 
 function m.moduleCoverage(name)
-    if not coverage then
-        return
-    end
-    local path = assert(package.searchpath(name, package.path))
-    local f = assert(loadfile(path))
-    local source = debug.getinfo(f, "S").source
-    coverage.include(source, ("module `%s`"):format(name))
+    coverage.include(name)
 end
 
-if options.coverage then
-    local LuaVersion = (function ()
-        local major, minor = _VERSION:match "Lua (%d)%.(%d)"
-        return tonumber(major) * 10 + tonumber(minor)
-    end)()
-    if LuaVersion == 53 or LuaVersion == 54 or LuaVersion == 55 then
-        coverage = coverage_start()
-        coverage.start()
-    end
-end
 m.options = options
 m.stringify = stringify
+
+if options.coverage then
+    local major, minor = _VERSION:match "Lua (%d)%.(%d)"
+    if major == "5" then
+        if minor == "3" or minor == "4" or minor == "5" then
+            coverage.start()
+        end
+    end
+end
 
 return m
