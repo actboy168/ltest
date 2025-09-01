@@ -1333,18 +1333,17 @@ function m.run()
         end
     end
     coverage.print_result()
-    local s = string.format("Ran %d tests in %0.3f seconds, %d successes, %d failures", #selected, duration, successes, #failures)
-    if #selected - successes - #failures > 0 then
-        s = s..string.format(", %d skipped", (#selected - successes - #failures))
+    local skipped = #selected - successes - #failures
+    if skipped <= 0 then
+        print(string.format("Ran %d tests in %0.3f seconds, %d successes, %d failures", #selected, duration, successes, #failures))
+    else
+        print(string.format("Ran %d tests in %0.3f seconds, %d successes, %d failures, %d skipped", #selected, duration, successes, #failures, skipped))
     end
-    print(s)
     if #failures == 0 then
         print("OK")
         if options.touch then
             touch(options.touch)
         end
-    end
-    if #failures == 0 then
         return 0
     end
     return 1
