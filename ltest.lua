@@ -573,16 +573,16 @@ local undump55; do
     local function LoadString()
         local size = LoadUnsigned(math.maxinteger)
         if size == 0 then
-            return nil
-        end
-        if size == 1 then
             local idx = LoadUnsigned(math.maxinteger)
+            if idx == 0 then
+                return nil
+            end
             if not cached[idx] then
                 error("invalid string index")
             end
             return cached[idx]
         end
-        local str = LoadCharN(size - 1)
+        local str = LoadCharN(size)
         cached[#cached + 1] = str
         return str
     end
@@ -689,7 +689,7 @@ local undump55; do
         f.linedefined = LoadInt()
         f.lastlinedefined = LoadInt()
         f.numparams = LoadByte()
-        f.is_vararg = LoadByte() & 1
+        f.is_vararg = LoadByte() & 3
         f.maxstacksize = LoadByte()
         LoadCode(f)
         LoadConstants(f)
@@ -762,6 +762,28 @@ local coverage = {}; do
         end
     end
 
+    local function calc_actives_55(proto, actives)
+        local currentline = proto.linedefined
+        local abs = {}
+        for _, line in ipairs(proto.abslineinfo) do
+            abs[line.pc] = line.line
+        end
+        local start = 1
+        if proto.is_vararg > 0 then
+            local OP_VARARGPREP = 83
+            assert(proto.code[1] % 128 == OP_VARARGPREP)
+            currentline = nextline(proto, abs, currentline, 1)
+            start = 2
+        end
+        for pc = start, #proto.lineinfo do
+            currentline = nextline(proto, abs, currentline, pc)
+            actives[currentline] = true
+        end
+        for i = 1, proto.sizep do
+            calc_actives_55(proto.p[i], actives)
+        end
+    end
+
     local function calc_actives_54(proto, actives)
         local currentline = proto.linedefined
         local abs = {}
@@ -770,7 +792,8 @@ local coverage = {}; do
         end
         local start = 1
         if proto.is_vararg > 0 then
-            assert(proto.code[1] % 128 == 81) -- OP_VARARGPREP
+            local OP_VARARGPREP = 81
+            assert(proto.code[1] % 128 == OP_VARARGPREP)
             currentline = nextline(proto, abs, currentline, 1)
             start = 2
         end
@@ -804,7 +827,9 @@ local coverage = {}; do
         end
         local cl, version = undump(string.dump(assert(load(source))))
         local actives = {}
-        if version >= 0x54 then
+        if version >= 0x55 then
+            calc_actives_55(cl.f, actives)
+        elseif version == 0x54 then
             calc_actives_54(cl.f, actives)
         else
             calc_actives_53(cl.f, actives)
