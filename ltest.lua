@@ -1309,6 +1309,52 @@ local function errorHandler(e)
     return { msg = e, trace = string.sub(debug.traceback("", 3), 2) }
 end
 
+-- Execute setup/teardown with consistent error handling.
+-- Returns ok, err on failure; returns true on success.
+local function runHook(classInstance, hookName, testName)
+    local hook = classInstance[hookName]
+    if not hook then
+        return true
+    end
+    local ok, err = xpcall(function () hook(classInstance) end, errorHandler)
+    if not ok then
+        local prefix = hookName .. " failed: "
+        if type(err) == "string" then
+            err = { msg = prefix .. err, name = testName .. "." .. hookName, trace = "" }
+        else
+            err.msg = prefix .. (type(err.msg) == "string" and err.msg or stringify(err.msg))
+            err.name = testName .. "." .. hookName
+            err.trace = pretty_trace(testName, err.trace)
+        end
+        return false, err
+    end
+    return true
+end
+
+-- Combine test failure with teardown failure for reporting.
+local function combineErrors(testErr, teardownErr, testName)
+    local prefix = "teardown failed: "
+    local teardownMsg
+    if type(teardownErr) == "string" then
+        teardownMsg = prefix .. teardownErr
+    else
+        teardownMsg = prefix .. (type(teardownErr.msg) == "string" and teardownErr.msg or stringify(teardownErr.msg))
+    end
+    if not testErr then
+        -- Test passed but teardown failed
+        return {
+            msg = teardownMsg,
+            name = testName .. ".teardown",
+            trace = type(teardownErr) ~= "string" and pretty_trace(testName, teardownErr.trace) or ""
+        }
+    end
+    -- Both failed: append to test error
+    if type(testErr) ~= "string" then
+        testErr.msg = testErr.msg .. "\n" .. teardownMsg
+    end
+    return testErr
+end
+
 local function execFunction(failures, name, classInstance, methodInstance, mark)
     if mark == _IGNORE_ then
         return
@@ -1318,24 +1364,38 @@ local function execFunction(failures, name, classInstance, methodInstance, mark)
         printTestSkipped()
         return
     end
-    local ok, err = xpcall(function () methodInstance(classInstance) end, errorHandler)
-    if ok then
-        printTestSuccess()
-        return true
-    else
-        if type(err) == "string" then
-            err = { msg = err, name = name, trace = "" }
-        else
-            ---@cast err -nil
-            err.name = name
-            err.trace = pretty_trace(name, err.trace)
-            if type(err.msg) ~= "string" then
-                err.msg = stringify(err.msg)
-            end
-        end
+    -- Setup
+    local ok, err = runHook(classInstance, "setup", name)
+    if not ok then
         failures[#failures+1] = err
         printTestFailed(err.msg)
+        return
     end
+    -- Run test
+    local testOk, testErr = xpcall(function () methodInstance(classInstance) end, errorHandler)
+    -- Teardown (always runs even if test failed)
+    local teardownOk, teardownErr = runHook(classInstance, "teardown", name)
+    if not teardownOk then
+        testErr = combineErrors(testOk and nil or testErr, teardownErr, name)
+        testOk = false
+    end
+    -- Report result
+    if testOk then
+        printTestSuccess()
+        return true
+    end
+    -- Format error for reporting
+    if type(testErr) == "string" then
+        testErr = { msg = testErr, name = name, trace = "" }
+    else
+        testErr.name = name
+        testErr.trace = pretty_trace(name, testErr.trace)
+        if type(testErr.msg) ~= "string" then
+            testErr.msg = stringify(testErr.msg)
+        end
+    end
+    failures[#failures+1] = testErr
+    printTestFailed(testErr.msg)
 end
 
 local function matchPattern(expr, patterns)
