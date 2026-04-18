@@ -1017,6 +1017,124 @@ local function failure(...)
     error(string.format(...), 3)
 end
 
+local function splitLines(str)
+    local lines = {}
+    local pos = 1
+    while pos <= #str do
+        local startPos, endPos = str:find("\r?\n", pos)
+        if startPos then
+            lines[#lines + 1] = str:sub(pos, startPos - 1)
+            pos = endPos + 1
+        else
+            lines[#lines + 1] = str:sub(pos)
+            break
+        end
+    end
+    if str:sub(-1) == "\n" then
+        lines[#lines + 1] = ""
+    end
+    return lines
+end
+
+local function computeLCS(a, b)
+    local m, n = #a, #b
+    local c = {}
+    for i = 0, m do
+        c[i] = {}
+        c[i][0] = 0
+    end
+    for j = 0, n do
+        c[0][j] = 0
+    end
+    for i = 1, m do
+        for j = 1, n do
+            if a[i] == b[j] then
+                c[i][j] = c[i - 1][j - 1] + 1
+            elseif c[i - 1][j] >= c[i][j - 1] then
+                c[i][j] = c[i - 1][j]
+            else
+                c[i][j] = c[i][j - 1]
+            end
+        end
+    end
+    return c
+end
+
+local function backtrackLCS(c, a, b, i, j, result)
+    if i == 0 or j == 0 then
+        return
+    end
+    if a[i] == b[j] then
+        backtrackLCS(c, a, b, i - 1, j - 1, result)
+        result[#result + 1] = i
+    elseif c[i - 1][j] >= c[i][j - 1] then
+        backtrackLCS(c, a, b, i - 1, j, result)
+    else
+        backtrackLCS(c, a, b, i, j - 1, result)
+    end
+end
+
+local function getLCSIndices(a, b)
+    local c = computeLCS(a, b)
+    local result = {}
+    backtrackLCS(c, a, b, #a, #b, result)
+    return result
+end
+
+local function formatDiff(actualLines, expectedLines)
+    local lcsIndices = getLCSIndices(actualLines, expectedLines)
+    local result = {}
+    local i, j = 1, 1
+    local lcsPos = 1
+
+    while i <= #actualLines or j <= #expectedLines do
+        local lcsLine = lcsIndices[lcsPos]
+
+        if lcsLine then
+            while i < lcsLine do
+                result[#result + 1] = "- " .. actualLines[i]
+                i = i + 1
+            end
+            while j <= #expectedLines and expectedLines[j] ~= actualLines[lcsLine] do
+                result[#result + 1] = "+ " .. expectedLines[j]
+                j = j + 1
+            end
+            result[#result + 1] = "  " .. actualLines[i]
+            i = i + 1
+            j = j + 1
+            lcsPos = lcsPos + 1
+        else
+            while i <= #actualLines do
+                result[#result + 1] = "- " .. actualLines[i]
+                i = i + 1
+            end
+            while j <= #expectedLines do
+                result[#result + 1] = "+ " .. expectedLines[j]
+                j = j + 1
+            end
+        end
+    end
+
+    return table.concat(result, "\n")
+end
+
+local function stringDiff(actual, expected)
+    if type(actual) ~= "string" or type(expected) ~= "string" then
+        return nil
+    end
+    if actual == expected then
+        return nil
+    end
+    if not actual:find("\n") and not expected:find("\n") then
+        return nil
+    end
+
+    local actualLines = splitLines(actual)
+    local expectedLines = splitLines(expected)
+
+    return formatDiff(actualLines, expectedLines)
+end
+
 function m.equals(actual, expected)
     return equals(actual, expected)
 end
@@ -1027,7 +1145,12 @@ end
 
 function m.assertEquals(actual, expected, errmsg)
     if not equals(actual, expected) then
-        failure("expected: %s, actual: %s.%s", stringify(expected), stringify(actual), errmsg or "")
+        local diff = stringDiff(actual, expected)
+        if diff then
+            failure("strings differ:\n%s", diff)
+        else
+            failure("expected: %s, actual: %s.%s", stringify(expected), stringify(actual), errmsg or "")
+        end
     end
 end
 
