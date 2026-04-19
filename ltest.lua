@@ -1183,6 +1183,36 @@ function m.assertErrorMsgEquals(expectedMsg, func, ...)
     m.assertEquals(actualMsg, expectedMsg)
 end
 
+function m.assert(value, errmsg)
+    if not value then
+        failure("assertion failed: %s.%s", stringify(value), errmsg or "")
+    end
+end
+
+function m.assertTrue(value, errmsg)
+    if value ~= true then
+        failure("expected: true, actual: %s.%s", stringify(value), errmsg or "")
+    end
+end
+
+function m.assertFalse(value, errmsg)
+    if value ~= false then
+        failure("expected: false, actual: %s.%s", stringify(value), errmsg or "")
+    end
+end
+
+function m.assertNil(value, errmsg)
+    if value ~= nil then
+        failure("expected: nil, actual: %s.%s", stringify(value), errmsg or "")
+    end
+end
+
+function m.assertNotNil(value, errmsg)
+    if value == nil then
+        failure("expected: not nil, actual: nil.%s", errmsg or "")
+    end
+end
+
 for _, name in ipairs { "Nil", "Number", "String", "Table", "Boolean", "Function", "Userdata", "Thread" } do
     local typeExpected = name:lower()
     m["assertIs"..name] = function (value, errmsg)
