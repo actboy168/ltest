@@ -1523,26 +1523,19 @@ local isWindowsShell; do
         if package.config:sub(1, 1) ~= "\\" then
             return false
         end
-        local script = ([[%s]]):format(table.concat({
-            [[$curPid=(Get-WmiObject Win32_Process -Filter "ProcessId=$PID").ParentProcessId;]],
-            "$seen=@{};",
-            "while ($curPid -and -not $seen[$curPid]) {",
-            "  $seen[$curPid]=$true;",
-            [[  $p=Get-WmiObject Win32_Process -Filter "ProcessId=$curPid";]],
-            "  if (-not $p) { break };",
-            "  $n=$p.Name.ToLower();",
-            "  if ($n -eq 'cmd.exe' -or $n -eq 'powershell.exe' -or $n -eq 'pwsh.exe') { 'true'; exit };",
-            "  $curPid=$p.ParentProcessId",
-            "};",
-            "'false'",
-        }, " "))
-        local p = io.popen(('powershell -NoProfile -Command "%s"'):format(script))
-        if not p then
+        -- Use env vars to detect Unix-like shells (Git Bash/MSYS/MSYS2/Cygwin).
+        -- These are set by default in those environments, zero cost to check.
+        if os.getenv "MSYSTEM" then
             return false
         end
-        local output = p:read "a"
-        p:close()
-        return output:match "true" ~= nil
+        local shell = os.getenv "SHELL"
+        if shell and shell:match "/" then
+            return false
+        end
+        if os.getenv "TERM" then
+            return false
+        end
+        return true
     end
     if options.shell then
         isWindowsShell = options.shell ~= "sh"
