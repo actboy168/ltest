@@ -916,10 +916,9 @@ local coverage = {}; do
                     lines[#lines+1] = tostring(i)
                 end
             end
-            str[#str+1] = string.format("coverage: %02.02f%% (%d/%d) module `%s`", pass / total * 100, pass, total, file.name)
+            str[#str+1] = string.format("coverage: %s %.2f%% (%d/%d)", file.name, pass / total * 100, pass, total)
             if #lines > 0 then
-                str[#str+1] = table.concat(lines, " ")
-                str[#str+1] = table.concat(status)
+                str[#str+1] = ", uncovered: " .. table.concat(lines, ",")
             end
         end
         print(table.concat(str, "\n"))
@@ -1295,14 +1294,14 @@ end
 
 local function printTestName(name)
     if options.verbosity then
-        output:write("    ", name, " ... ")
+        output:write(name, " ")
         output:flush()
     end
 end
 
 local function printTestSuccess()
     if options.verbosity then
-        output:write("Ok\n")
+        output:write("PASS\n")
     else
         output:write(".")
     end
@@ -1320,7 +1319,7 @@ end
 
 local function printTestSkipped()
     if options.verbosity then
-        output:write("Skipped\n")
+        output:write("SKIP\n")
     else
         output:write(".")
     end
@@ -1564,9 +1563,6 @@ function m.run()
     if options.list then
         return showList(selected)
     end
-    if options.verbosity then
-        print("Started on "..os.date())
-    end
     local successes = 0
     local failures = {}
     collectgarbage "collect"
@@ -1579,27 +1575,25 @@ function m.run()
     end
     local duration = os.clock() - startTime
     coverage.stop()
-    if options.verbosity then
-        print("=========================================================")
-    else
-        print()
-    end
-    if #failures ~= 0 then
-        print("Failed tests:")
-        print("-------------")
-        for i, err in ipairs(failures) do
-            print(i..") "..err.name)
-            print(err.msg)
-            print(err.trace)
+    print()
+    coverage.print_result()
+    if #failures ~= 0 and not options.verbosity then
+        for _, err in ipairs(failures) do
+            print("FAIL " .. err.name)
+            if err.msg and #err.msg > 0 then
+                print("  " .. err.msg)
+            end
+            if err.trace and #err.trace > 0 then
+                print("  " .. err.trace)
+            end
             print()
         end
     end
-    coverage.print_result()
     local skipped = #selected - successes - #failures
     if skipped <= 0 then
-        print(string.format("Ran %d tests in %0.3f seconds, %d successes, %d failures", #selected, duration, successes, #failures))
+        print(string.format("%d tests, %d passed, %d failed (%.3fs)", #selected, successes, #failures, duration))
     else
-        print(string.format("Ran %d tests in %0.3f seconds, %d successes, %d failures, %d skipped", #selected, duration, successes, #failures, skipped))
+        print(string.format("%d tests, %d passed, %d failed, %d skipped (%.3fs)", #selected, successes, #failures, skipped, duration))
     end
     if #failures == 0 then
         print("OK")
